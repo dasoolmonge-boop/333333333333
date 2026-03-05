@@ -1,6 +1,4 @@
 // app.js - ОБЪЕДИНЕННЫЙ ЗАПУСКАТОР (мини-приложение + бот)
-
-// app.js - ОБЪЕДИНЕННЫЙ ЗАПУСКАТОР (мини-приложение + бот)
 // Версия с автоматическим поиском Python
 
 const http = require('http');
@@ -383,4 +381,3 @@ function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-
