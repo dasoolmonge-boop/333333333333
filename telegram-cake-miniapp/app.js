@@ -1,60 +1,150 @@
 // app.js - ОБЪЕДИНЕННЫЙ ЗАПУСКАТОР (мини-приложение + бот)
 
+// app.js - ОБЪЕДИНЕННЫЙ ЗАПУСКАТОР (мини-приложение + бот)
+// Версия с автоматическим поиском Python
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = "8714739961:AAG9l-7-G7duRNKuNtarP7rTchfvZQFCMxo";
 const ADMIN_ID = 1066867845;
 
 // ============================================
-// ЗАПУСК TELEGRAM БОТА
+// ДИАГНОСТИКА ОКРУЖЕНИЯ
 // ============================================
 
-console.log('🤖 Запуск Telegram бота...');
+console.log('='.repeat(60));
+console.log('🔍 ДИАГНОСТИКА ОКРУЖЕНИЯ');
+console.log('='.repeat(60));
 
-// Определяем путь к боту
-const botPaths = [
-    path.join(__dirname, '..', 'bot.py'),                    // ../bot.py
-    path.join(__dirname, '..', 'Крутой тортик', 'bot.py'),   // ../Крутой тортик/bot.py
-    path.join(__dirname, '..', 'simple_bot.py'),             // ../simple_bot.py
-    path.join(__dirname, '..', 'main.py')                     // ../main.py
+// Информация о системе
+console.log(`🖥️  PLATFORM: ${process.platform}`);
+console.log(`📂 CURRENT DIR: ${process.cwd()}`);
+console.log(`🔧 NODE VERSION: ${process.version}`);
+console.log(`📋 PATH: ${process.env.PATH}`);
+
+// Проверка наличия Python
+console.log('\n🔍 ПОИСК PYTHON:');
+
+const pythonVariants = [
+    { cmd: 'python3', args: ['--version'] },
+    { cmd: 'python', args: ['--version'] },
+    { cmd: 'python3.11', args: ['--version'] },
+    { cmd: 'python3.10', args: ['--version'] },
+    { cmd: 'python3.9', args: ['--version'] },
+    { cmd: '/usr/bin/python3', args: ['--version'] },
+    { cmd: '/usr/local/bin/python3', args: ['--version'] },
+    { cmd: '/usr/bin/python', args: ['--version'] },
+    { cmd: '/usr/local/bin/python', args: ['--version'] }
 ];
 
-let botPath = null;
-for (const p of botPaths) {
-    if (fs.existsSync(p)) {
-        botPath = p;
-        console.log(`✅ Найден файл бота: ${botPath}`);
-        break;
+let PYTHON_CMD = null;
+let pythonVersion = null;
+
+for (const variant of pythonVariants) {
+    try {
+        console.log(`   Проверка: ${variant.cmd}...`);
+        const result = spawnSync(variant.cmd, variant.args, { 
+            encoding: 'utf8',
+            timeout: 2000
+        });
+        
+        if (result.status === 0) {
+            PYTHON_CMD = variant.cmd;
+            pythonVersion = result.stdout || result.stderr;
+            console.log(`   ✅ НАЙДЕН: ${variant.cmd} - ${pythonVersion.trim()}`);
+            break;
+        }
+    } catch (e) {
+        // Игнорируем ошибки
     }
 }
 
-if (botPath) {
-    // Запускаем бота в отдельном процессе - ИСПРАВЛЕНО: python -> python3
-    const botProcess = spawn('python3', [botPath], {
-        stdio: 'pipe',
-        shell: true,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
-    });
+if (!PYTHON_CMD) {
+    console.error('\n❌ КРИТИЧЕСКАЯ ОШИБКА: Python не найден!');
+    console.error('   Бот не может быть запущен.');
+    console.error('   Попробуйте установить Python или обратитесь в поддержку BotHost.');
+} else {
+    console.log(`\n✅ Будет использован Python: ${PYTHON_CMD}`);
+}
 
-    // Логируем вывод бота
-    botProcess.stdout.on('data', (data) => {
-        console.log(`[BOT] ${data.toString().trim()}`);
-    });
+console.log('='.repeat(60));
 
-    botProcess.stderr.on('data', (data) => {
-        console.error(`[BOT-ERROR] ${data.toString().trim()}`);
-    });
+// ============================================
+// ЗАПУСК TELEGRAM БОТА (если Python найден)
+// ============================================
 
-    botProcess.on('close', (code) => {
-        console.log(`⚠️ Процесс бота завершился с кодом ${code}`);
-    });
+let botProcess = null;
 
-    console.log(`✅ Бот запущен (PID: ${botProcess.pid})`);
+if (PYTHON_CMD) {
+    console.log('\n🤖 Запуск Telegram бота...');
+    
+    // Определяем путь к боту
+    const botPaths = [
+        path.join(__dirname, '..', 'bot.py'),                    // ../bot.py
+        path.join(__dirname, '..', 'Крутой тортик', 'bot.py'),   // ../Крутой тортик/bot.py
+        path.join(__dirname, '..', 'simple_bot.py'),             // ../simple_bot.py
+        path.join(__dirname, '..', 'main.py'),                    // ../main.py
+        path.join(__dirname, '..', 'start.py')                    // ../start.py
+    ];
+
+    let botPath = null;
+    for (const p of botPaths) {
+        if (fs.existsSync(p)) {
+            botPath = p;
+            console.log(`✅ Найден файл бота: ${botPath}`);
+            break;
+        }
+    }
+
+    if (botPath) {
+        // Запускаем бота в отдельном процессе
+        botProcess = spawn(PYTHON_CMD, [botPath], {
+            stdio: 'pipe',
+            shell: true,
+            env: { 
+                ...process.env, 
+                PYTHONIOENCODING: 'utf-8',
+                PYTHONUNBUFFERED: '1'
+            }
+        });
+
+        // Логируем вывод бота
+        botProcess.stdout.on('data', (data) => {
+            const lines = data.toString().trim().split('\n');
+            lines.forEach(line => {
+                if (line) console.log(`[BOT] ${line}`);
+            });
+        });
+
+        botProcess.stderr.on('data', (data) => {
+            const lines = data.toString().trim().split('\n');
+            lines.forEach(line => {
+                if (line) console.error(`[BOT-ERROR] ${line}`);
+            });
+        });
+
+        botProcess.on('close', (code) => {
+            if (code === 0) {
+                console.log(`✅ Процесс бота завершен (код: ${code})`);
+            } else {
+                console.log(`⚠️ Процесс бота завершился с кодом ${code}`);
+            }
+        });
+
+        botProcess.on('error', (err) => {
+            console.error(`❌ Ошибка запуска бота: ${err.message}`);
+        });
+
+        console.log(`✅ Бот запущен (PID: ${botProcess.pid})`);
+    } else {
+        console.error('❌ Файл бота не найден! Искал в:');
+        botPaths.forEach(p => console.error(`   - ${p}`));
+    }
 }
 
 // ============================================
@@ -248,27 +338,49 @@ function sendOrderToAdmin(orderData, res) {
 // ============================================
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log('='.repeat(50));
+    console.log('\n' + '='.repeat(60));
     console.log('🍰 МИНИ-ПРИЛОЖЕНИЕ ЗАПУЩЕНО');
-    console.log('='.repeat(50));
+    console.log('='.repeat(60));
     console.log(`✅ Mini App сервер запущен на порту ${PORT}`);
     console.log(`📁 Раздаем файлы из: ${path.join(__dirname, 'public')}`);
-    console.log('='.repeat(50));
-    console.log('🤖 Telegram бот запускается параллельно...');
-    console.log('='.repeat(50));
+    
+    if (PYTHON_CMD) {
+        console.log(`✅ Python найден: ${PYTHON_CMD}`);
+        if (botProcess) {
+            console.log(`✅ Бот запущен (PID: ${botProcess.pid})`);
+        }
+    } else {
+        console.log('❌ Python НЕ НАЙДЕН! Бот не запущен.');
+    }
+    
+    console.log('='.repeat(60) + '\n');
 });
 
 // ============================================
 // ОБРАБОТКА ЗАВЕРШЕНИЯ
 // ============================================
 
-process.on('SIGINT', () => {
+function shutdown() {
     console.log('\n🛑 Получен сигнал завершения...');
-    process.exit();
-});
+    
+    if (botProcess) {
+        console.log('🛑 Останавливаем бота...');
+        botProcess.kill();
+    }
+    
+    console.log('🛑 Останавливаем сервер...');
+    server.close(() => {
+        console.log('✅ Все процессы завершены');
+        process.exit(0);
+    });
+    
+    // Принудительное завершение через 5 секунд
+    setTimeout(() => {
+        console.log('⚠️ Принудительное завершение');
+        process.exit(1);
+    }, 5000);
+}
 
-process.on('SIGTERM', () => {
-    console.log('\n🛑 Получен сигнал завершения...');
-    process.exit();
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
