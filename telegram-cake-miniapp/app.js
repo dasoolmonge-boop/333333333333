@@ -34,8 +34,8 @@ for (const p of botPaths) {
 }
 
 if (botPath) {
-    // Запускаем бота в отдельном процессе
-    const botProcess = spawn('python', [botPath], {
+    // Запускаем бота в отдельном процессе - ИСПРАВЛЕНО: python -> python3
+    const botProcess = spawn('python3', [botPath], {
         stdio: 'pipe',
         shell: true,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
@@ -55,9 +55,6 @@ if (botPath) {
     });
 
     console.log(`✅ Бот запущен (PID: ${botProcess.pid})`);
-} else {
-    console.error('❌ Файл бота не найден! Искал в:');
-    botPaths.forEach(p => console.error(`   - ${p}`));
 }
 
 // ============================================
@@ -274,3 +271,4 @@ process.on('SIGTERM', () => {
     console.log('\n🛑 Получен сигнал завершения...');
     process.exit();
 });
+
